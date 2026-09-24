@@ -1,8 +1,232 @@
 <script setup>
+import { computed, onMounted, ref, watch } from 'vue'
+import ActivityIcon from '@/components/ActivityIcon.vue'
+import DateNav from '@/components/DateNav.vue'
+import BaseIcon from '@/components/icons/BaseIcon.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import DonutChart from '@/components/stats/DonutChart.vue'
+import WorkTargetBar from '@/components/stats/WorkTargetBar.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import { COUPLE_TAG, hasTag } from '@/lib/tags'
+import { formatHours, local, overlapMs } from '@/lib/time'
+import { useActivitiesStore } from '@/stores/activities'
+import { useRecordsStore } from '@/stores/records'
+
+const RANGES = ['day', 'week', 'month']
+const WORK_KEY = 'workActivityId'
+
+const activities = useActivitiesStore()
+const recordsStore = useRecordsStore()
+
+const range = ref('day')
+const anchor = ref(local())
+const records = ref([])
+const loading = ref(true)
+const error = ref('')
+const workActivityId = ref(readWorkId())
+
+function readWorkId() {
+  try {
+    return localStorage.getItem(WORK_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+// Weeks start on Monday.
+const unit = computed(() => (range.value === 'week' ? 'isoWeek' : range.value))
+const from = computed(() => anchor.value.startOf(unit.value))
+const to = computed(() => from.value.add(1, range.value))
+const isCurrent = computed(() => to.value.valueOf() > Date.now())
+
+const label = computed(() => {
+  if (range.value === 'day') return isCurrent.value ? 'Today' : from.value.format('ddd, D MMM YYYY')
+  if (range.value === 'week') return `${from.value.format('D MMM')} – ${to.value.subtract(1, 'day').format('D MMM')}`
+  return from.value.format('MMMM YYYY')
+})
+
+// Days in range, up to today (no empty future days).
+const days = computed(() => {
+  const list = []
+  for (let d = from.value; d.isBefore(to.value) && d.valueOf() <= Date.now(); d = d.add(1, 'day')) list.push(d)
+  return list
+})
+
+function sum(list, start, end) {
+  return list.reduce((total, r) => total + overlapMs(r, start, end), 0)
+}
+
+const total = computed(() => sum(records.value, from.value, to.value))
+
+const perActivity = computed(() => {
+  const totals = {}
+  for (const r of records.value) {
+    totals[r.activity_type_id] = (totals[r.activity_type_id] ?? 0) + overlapMs(r, from.value, to.value)
+  }
+  return Object.entries(totals)
+    .map(([id, value]) => {
+      const a = activities.byId[id] ?? { id, name: 'Deleted activity', color: '#94a3b8', icon: '?' }
+      return { activity: a, label: a.name, color: a.color, value }
+    })
+    .filter((i) => i.value > 0)
+    .sort((a, b) => b.value - a.value)
+})
+
+const coupleRecords = computed(() => records.value.filter((r) => hasTag(r, COUPLE_TAG)))
+const coupleTotal = computed(() => sum(coupleRecords.value, from.value, to.value))
+
+const workOptions = computed(() => activities.active.map((a) => ({ value: a.id, label: a.name })))
+
+const workRecords = computed(() => records.value.filter((r) => r.activity_type_id === workActivityId.value))
+const workDays = computed(() =>
+  days.value.map((d) => ({ day: d, value: sum(workRecords.value, d, d.add(1, 'day')) })),
+)
+const workedDays = computed(() => workDays.value.filter((d) => d.value > 0))
+const onTargetCount = computed(
+  () => workedDays.value.filter((d) => d.value >= 8 * 3600_000 && d.value <= 9 * 3600_000).length,
+)
+
+async function load() {
+  loading.value = true
+  error.value = ''
+  try {
+    records.value = await recordsStore.listRange(from.value, to.value)
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(async () => {
+  try {
+    await activities.load()
+  } catch (e) {
+    error.value = e.message
+  }
+  // First visit: guess the work activity by name.
+  if (!activities.byId[workActivityId.value]) {
+    workActivityId.value = activities.active.find((a) => /work|kerja/i.test(a.name))?.id ?? ''
+  }
+  load()
+})
+
+watch([range, () => from.value.valueOf()], load)
+
+watch(workActivityId, (id) => {
+  try {
+    localStorage.setItem(WORK_KEY, id)
+  } catch {
+    // storage unavailable — choice lasts for this session only
+  }
+})
+
+function shift(step) {
+  anchor.value = anchor.value.add(step, range.value)
+}
 </script>
 
 <template>
   <PageHeader title="Stats" />
-  <p class="px-4 text-slate-500">Statistics come in Phase 5.</p>
+
+  <div class="space-y-4 px-4 pb-4">
+    <div class="grid grid-cols-3 rounded-xl bg-slate-200/70 p-1 dark:bg-slate-800">
+      <button
+        v-for="r in RANGES"
+        :key="r"
+        type="button"
+        class="rounded-lg py-2 text-sm font-medium capitalize transition-colors"
+        :class="
+          range === r
+            ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-slate-100'
+            : 'text-slate-500 dark:text-slate-400'
+        "
+        @click="range = r"
+      >
+        {{ r }}
+      </button>
+    </div>
+
+    <DateNav
+      :label="label"
+      :sublabel="isCurrent ? '' : 'Tap to go to current'"
+      :can-next="!isCurrent"
+      @prev="shift(-1)"
+      @next="shift(1)"
+      @reset="anchor = local()"
+    />
+
+    <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
+    <p v-if="loading" class="text-slate-500 dark:text-slate-400">Loading…</p>
+
+    <template v-else>
+      <!-- Couple time -->
+      <section class="flex items-center gap-3 rounded-2xl bg-rose-50 p-4 dark:bg-rose-500/10">
+        <span class="flex h-11 w-11 items-center justify-center rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400">
+          <BaseIcon name="heart" size="lg" />
+        </span>
+        <div class="flex-1">
+          <p class="text-sm text-rose-700 dark:text-rose-300">Couple time</p>
+          <p class="text-xs text-rose-600/70 dark:text-rose-300/60">tagged “{{ COUPLE_TAG }}”</p>
+        </div>
+        <div class="text-right">
+          <p class="text-xl font-bold text-rose-700 tabular-nums dark:text-rose-300">{{ formatHours(coupleTotal) }}</p>
+          <p v-if="range !== 'day' && days.length" class="text-xs text-rose-600/70 dark:text-rose-300/60">
+            ~{{ formatHours(coupleTotal / days.length) }}/day
+          </p>
+        </div>
+      </section>
+
+      <!-- Work vs target -->
+      <section class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div class="mb-3 flex items-center gap-2">
+          <BaseIcon name="briefcase" size="md" class="text-slate-500 dark:text-slate-400" />
+          <h2 class="flex-1 font-semibold">Work time</h2>
+          <BaseSelect v-model="workActivityId" :options="workOptions" placeholder="Pick activity…" compact />
+        </div>
+
+        <p v-if="!workActivityId" class="text-sm text-slate-500 dark:text-slate-400">
+          Choose which activity counts as work.
+        </p>
+        <WorkTargetBar v-else-if="range === 'day'" :value="workDays[0]?.value ?? 0" />
+        <template v-else>
+          <p class="mb-3 text-sm text-slate-500 dark:text-slate-400">
+            On target (8–9h) {{ onTargetCount }} of {{ workedDays.length }} work days
+          </p>
+          <p v-if="!workedDays.length" class="text-sm text-slate-500 dark:text-slate-400">No work recorded.</p>
+          <div v-else class="space-y-2.5">
+            <WorkTargetBar
+              v-for="d in workedDays"
+              :key="d.day.valueOf()"
+              :value="d.value"
+              :label="d.day.format('ddd D')"
+              compact
+            />
+          </div>
+        </template>
+      </section>
+
+      <!-- Per activity -->
+      <section class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="mb-3 font-semibold">By activity</h2>
+        <p v-if="!perActivity.length" class="py-6 text-center text-slate-500 dark:text-slate-400">No records.</p>
+        <template v-else>
+          <DonutChart :items="perActivity">
+            <span class="text-xs text-slate-500 dark:text-slate-400">Total</span>
+            <span class="text-xl font-bold tabular-nums">{{ formatHours(total) }}</span>
+          </DonutChart>
+          <ul class="mt-4 space-y-2">
+            <li v-for="i in perActivity" :key="i.activity.id" class="flex items-center gap-3">
+              <ActivityIcon :activity="i.activity" size="sm" />
+              <span class="flex-1 truncate">{{ i.label }}</span>
+              <span class="text-sm text-slate-500 tabular-nums dark:text-slate-400">
+                {{ Math.round((i.value / total) * 100) }}%
+              </span>
+              <span class="w-16 text-right text-sm font-semibold tabular-nums">{{ formatHours(i.value) }}</span>
+            </li>
+          </ul>
+        </template>
+      </section>
+    </template>
+  </div>
 </template>

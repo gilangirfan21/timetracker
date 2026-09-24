@@ -2,19 +2,26 @@
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BottomNav from '@/components/BottomNav.vue'
+import { useActivitiesStore } from '@/stores/activities'
 import { useAuthStore } from '@/stores/auth'
+import { useRunningStore } from '@/stores/running'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const activities = useActivitiesStore()
+const running = useRunningStore()
 
 const showNav = computed(() => !route.meta.public)
 
-// Kick back to login if the session ends (logout here or in another tab, token expiry).
+// Session ended (logout here or in another tab, token expiry): clear data, go to login.
 watch(
   () => auth.isLoggedIn,
   (loggedIn) => {
-    if (!loggedIn && !route.meta.public) router.replace({ name: 'login' })
+    if (loggedIn) return
+    activities.reset()
+    running.reset()
+    if (!route.meta.public) router.replace({ name: 'login' })
   },
 )
 </script>

@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -27,7 +28,8 @@ async function submit() {
 </script>
 
 <template>
-  <div class="flex min-h-full flex-col justify-center px-6">
+  <div class="relative flex min-h-full flex-col justify-center px-6">
+    <ThemeToggle class="absolute top-4 right-4" />
     <h1 class="mb-8 text-center text-3xl font-bold">Time Tracker</h1>
     <form class="space-y-4" @submit.prevent="submit">
       <input
@@ -36,7 +38,7 @@ async function submit() {
         autocomplete="email"
         placeholder="Email"
         required
-        class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base"
+        class="field"
       />
       <input
         v-model="password"
@@ -44,13 +46,13 @@ async function submit() {
         autocomplete="current-password"
         placeholder="Password"
         required
-        class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base"
+        class="field"
       />
-      <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
+      <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
       <button
         type="submit"
         :disabled="loading"
-        class="w-full rounded-xl bg-indigo-600 py-3 text-base font-semibold text-white disabled:opacity-50"
+        class="btn-primary w-full"
       >
         {{ loading ? 'Logging in…' : 'Log in' }}
       </button>
