@@ -104,11 +104,11 @@ function confirmRemove() {
 
     <div>
       <span class="label">Start</span>
-      <DateTimeField v-model="form.start" />
+      <DateTimeField v-model="form.start" quick-adjust />
     </div>
     <div>
       <span class="label">End</span>
-      <DateTimeField v-model="form.end" />
+      <DateTimeField v-model="form.end" quick-adjust />
       <p v-if="invalidRange" class="mt-1.5 text-sm text-red-600 dark:text-red-400">End must be after start.</p>
     </div>
 

@@ -17,6 +17,8 @@ const isDark = ref(readInitial())
 
 function apply() {
   document.documentElement.classList.toggle('dark', isDark.value)
+  // Match the browser/status bar to the page background (slate-950 / slate-50).
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDark.value ? '#020617' : '#f8fafc')
 }
 
 watch(isDark, (value) => {

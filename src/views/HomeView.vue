@@ -63,7 +63,7 @@ async function tap(activity) {
 </script>
 
 <template>
-  <PageHeader title="Home" />
+  <PageHeader title="Timer" />
 
   <div class="space-y-4 px-4">
     <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>

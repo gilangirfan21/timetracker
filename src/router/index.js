@@ -5,8 +5,9 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
-    { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
-    { path: '/records', name: 'records', component: () => import('@/views/RecordsView.vue') },
+    { path: '/', name: 'records', component: () => import('@/views/RecordsView.vue') },
+    { path: '/timer', name: 'timer', component: () => import('@/views/HomeView.vue') },
+    { path: '/records', redirect: '/' },
     { path: '/stats', name: 'stats', component: () => import('@/views/StatsView.vue') },
     { path: '/activities', name: 'activities', component: () => import('@/views/ActivitiesView.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
@@ -21,7 +22,7 @@ router.beforeEach(async (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.name === 'login' && auth.isLoggedIn) {
-    return { name: 'home' }
+    return { name: 'records' }
   }
 })
 

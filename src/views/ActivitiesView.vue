@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import ActivityForm from '@/components/ActivityForm.vue'
 import ActivityIcon from '@/components/ActivityIcon.vue'
+import FloatingAddButton from '@/components/FloatingAddButton.vue'
 import BaseIcon from '@/components/icons/BaseIcon.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -49,15 +50,13 @@ function logout() {
 
 <template>
   <PageHeader title="Activities">
-    <button type="button" class="icon-btn" aria-label="Add activity" @click="editing = {}">
-      <BaseIcon name="plus" size="md" />
-    </button>
     <button type="button" class="icon-btn hover:!text-red-600 dark:hover:!text-red-400" aria-label="Log out" @click="logout">
       <BaseIcon name="logout" size="md" />
     </button>
   </PageHeader>
 
-  <div class="space-y-4 px-4">
+  <!-- Extra bottom padding so the last row isn't hidden behind the floating button. -->
+  <div class="space-y-4 px-4 pb-20">
     <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
     <p v-if="loading" class="text-slate-500 dark:text-slate-400">Loading…</p>
 
@@ -114,6 +113,8 @@ function logout() {
       <p class="pt-4 text-center text-xs text-slate-400 dark:text-slate-500">Logged in as {{ auth.user?.email }}</p>
     </template>
   </div>
+
+  <FloatingAddButton label="Add activity" @click="editing = {}" />
 
   <BaseModal v-if="editing" :title="editing.id ? 'Edit activity' : 'New activity'" @close="editing = null">
     <ActivityForm :activity="editing.id ? editing : null" :save="save" @cancel="editing = null" />

@@ -15,6 +15,18 @@ export const useRecordsStore = defineStore('records', () => {
     return data
   }
 
+  // end_time of the most recently finished record (any activity), or null if none.
+  // Used to suggest a gap-free start time for a new record.
+  async function latestEnd() {
+    const { data, error } = await supabase
+      .from('records')
+      .select('end_time')
+      .order('end_time', { ascending: false })
+      .limit(1)
+    if (error) throw error
+    return data[0]?.end_time ?? null
+  }
+
   // Distinct notes from the latest records of an activity, newest first.
   async function recentNotes(activityTypeId, limit = 20) {
     const { data, error } = await supabase
@@ -51,5 +63,5 @@ export const useRecordsStore = defineStore('records', () => {
     if (error) throw error
   }
 
-  return { listRange, recentNotes, create, update, remove }
+  return { listRange, latestEnd, recentNotes, create, update, remove }
 })

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import DateNav from '@/components/DateNav.vue'
-import BaseIcon from '@/components/icons/BaseIcon.vue'
+import FloatingAddButton from '@/components/FloatingAddButton.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import RecordForm from '@/components/RecordForm.vue'
 import RecordItem from '@/components/RecordItem.vue'
@@ -55,10 +55,23 @@ onMounted(() => {
 })
 watch(day, load)
 
-function openNew() {
-  // Default: the last hour if today, otherwise 09:00–10:00 on that day.
+async function openNew() {
+  // Default: now (today) or 10:00 on that day, ending an hour before.
   const end = isToday.value ? local().startOf('minute') : day.value.hour(10)
-  editing.value = { start_time: end.subtract(1, 'hour').toISOString(), end_time: end.toISOString() }
+  let start = end.subtract(1, 'hour')
+
+  // Today: prefer continuing right where the last recorded activity left off,
+  // so the gap in between (untracked time) doesn't go unlogged.
+  if (isToday.value) {
+    try {
+      const lastEnd = await recordsStore.latestEnd()
+      if (lastEnd && local(lastEnd).isBefore(end)) start = local(lastEnd)
+    } catch {
+      // suggestion is optional — fall back to the default above
+    }
+  }
+
+  editing.value = { start_time: start.toISOString(), end_time: end.toISOString() }
 }
 
 async function save(payload) {
@@ -76,13 +89,10 @@ async function remove() {
 </script>
 
 <template>
-  <PageHeader title="Records">
-    <button type="button" class="icon-btn" aria-label="Add record" @click="openNew">
-      <BaseIcon name="plus" size="md" />
-    </button>
-  </PageHeader>
+  <PageHeader title="Records" />
 
-  <div class="space-y-4 px-4">
+  <!-- Extra bottom padding so the last record isn't hidden behind the floating button. -->
+  <div class="space-y-4 px-4 pb-20">
     <DateNav
       :label="label"
       :sublabel="isToday ? day.format('ddd, D MMM') : 'Tap to go to today'"
@@ -118,6 +128,8 @@ async function remove() {
       />
     </ul>
   </div>
+
+  <FloatingAddButton label="Add record" @click="openNew" />
 
   <BaseModal v-if="editing" :title="editing.id ? 'Edit record' : 'Add record'" @close="editing = null">
     <RecordForm
