@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import ActivityIcon from '@/components/ActivityIcon.vue'
 import BaseIcon from '@/components/icons/BaseIcon.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import DateTimeField from '@/components/ui/DateTimeField.vue'
 import TagInput from '@/components/ui/TagInput.vue'
 import { TAG_SUGGESTIONS } from '@/lib/tags'
@@ -18,7 +19,8 @@ const props = defineProps({
 const emit = defineEmits(['cancel'])
 
 const form = reactive({
-  activity_type_id: props.record.activity_type_id ?? props.activities[0]?.id ?? '',
+  // New records start with no activity picked, so the user has to choose one.
+  activity_type_id: props.record.activity_type_id ?? '',
   start: props.record.start_time,
   end: props.record.end_time,
   tags: [...(props.record.tags ?? [])],
@@ -27,6 +29,7 @@ const form = reactive({
 const tagInput = ref(null)
 const busy = ref(false)
 const error = ref('')
+const confirmingDelete = ref(false)
 
 const invalidRange = computed(() => new Date(form.end) <= new Date(form.start))
 
@@ -85,7 +88,12 @@ function submit() {
 }
 
 function confirmRemove() {
-  if (confirm('Delete this record?')) run(props.remove)
+  confirmingDelete.value = true
+}
+
+function doRemove() {
+  confirmingDelete.value = false
+  run(props.remove)
 }
 </script>
 
@@ -154,4 +162,13 @@ function confirmRemove() {
       </button>
     </div>
   </form>
+
+  <ConfirmDialog
+    v-if="confirmingDelete"
+    title="Delete record?"
+    message="This can't be undone."
+    confirm-text="Delete"
+    @cancel="confirmingDelete = false"
+    @confirm="doRemove"
+  />
 </template>

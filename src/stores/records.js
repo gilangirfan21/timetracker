@@ -15,6 +15,24 @@ export const useRecordsStore = defineStore('records', () => {
     return data
   }
 
+  // Every record ever created, oldest first. Paged since Supabase caps a
+  // single request at 1000 rows — fine for a personal tracker's full history.
+  async function listAll() {
+    const PAGE = 1000
+    const all = []
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('records')
+        .select('*')
+        .order('start_time')
+        .range(from, from + PAGE - 1)
+      if (error) throw error
+      all.push(...data)
+      if (data.length < PAGE) break
+    }
+    return all
+  }
+
   // end_time of the most recently finished record (any activity), or null if none.
   // Used to suggest a gap-free start time for a new record.
   async function latestEnd() {
@@ -63,5 +81,5 @@ export const useRecordsStore = defineStore('records', () => {
     if (error) throw error
   }
 
-  return { listRange, latestEnd, recentNotes, create, update, remove }
+  return { listRange, listAll, latestEnd, recentNotes, create, update, remove }
 })

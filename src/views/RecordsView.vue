@@ -2,8 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import DateNav from '@/components/DateNav.vue'
 import FloatingAddButton from '@/components/FloatingAddButton.vue'
+import BaseIcon from '@/components/icons/BaseIcon.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import RecordForm from '@/components/RecordForm.vue'
+import RecordGap from '@/components/RecordGap.vue'
 import RecordItem from '@/components/RecordItem.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import { formatHours, local, overlapMs } from '@/lib/time'
@@ -13,12 +15,32 @@ import { useRecordsStore } from '@/stores/records'
 const activities = useActivitiesStore()
 const recordsStore = useRecordsStore()
 
+const SORT_KEY = 'recordsSortDesc'
+
 const day = ref(local().startOf('day'))
 const records = ref([])
 const loading = ref(true)
 const error = ref('')
+const sortDesc = ref(readSortDesc())
 // null = closed; { id, ... } = editing; { start_time, end_time } = new
 const editing = ref(null)
+
+function readSortDesc() {
+  try {
+    const saved = localStorage.getItem(SORT_KEY)
+    return saved === null ? true : saved === 'true'
+  } catch {
+    return true
+  }
+}
+
+watch(sortDesc, (value) => {
+  try {
+    localStorage.setItem(SORT_KEY, value)
+  } catch {
+    // storage unavailable — preference lasts for this session only
+  }
+})
 
 const dayEnd = computed(() => day.value.add(1, 'day'))
 const isToday = computed(() => day.value.isSame(local(), 'day'))
@@ -31,6 +53,35 @@ const label = computed(() => {
 
 // Only the part inside this day counts (records crossing midnight are split).
 const total = computed(() => records.value.reduce((sum, r) => sum + overlapMs(r, day.value, dayEnd.value), 0))
+
+// Below this, an untracked gap wouldn't be worth a row (rounding noise).
+const MIN_GAP_MS = 60_000
+
+// Records plus the untracked gaps between them (and before/after), in one
+// chronological timeline so nothing recorded stays invisible. Concurrent
+// (overlapping) activities are handled by tracking the furthest point covered
+// so far rather than assuming the previous record's end is the gap start.
+const timeline = computed(() => {
+  const boundaryEnd = isToday.value ? local() : dayEnd.value
+  const clipped = records.value
+    .map((r) => ({
+      record: r,
+      start: local(Math.max(new Date(r.start_time).getTime(), day.value.valueOf())),
+      end: local(Math.min(new Date(r.end_time).getTime(), dayEnd.value.valueOf())),
+    }))
+    .sort((a, b) => a.start.valueOf() - b.start.valueOf())
+
+  const items = []
+  let cursor = day.value
+  for (const c of clipped) {
+    if (c.start.valueOf() - cursor.valueOf() > MIN_GAP_MS) items.push({ kind: 'gap', start: cursor, end: c.start })
+    items.push({ kind: 'record', record: c.record })
+    if (c.end.valueOf() > cursor.valueOf()) cursor = c.end
+  }
+  if (boundaryEnd.valueOf() - cursor.valueOf() > MIN_GAP_MS) items.push({ kind: 'gap', start: cursor, end: boundaryEnd })
+
+  return sortDesc.value ? items.reverse() : items
+})
 
 // Pickable in the form: active ones, plus the edited record's activity if archived.
 const formActivities = computed(() =>
@@ -111,22 +162,36 @@ async function remove() {
 
     <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
     <p v-if="loading" class="text-slate-500 dark:text-slate-400">Loading…</p>
-    <p v-else-if="!records.length" class="py-8 text-center text-slate-500 dark:text-slate-400">
+    <p v-else-if="!timeline.length" class="py-8 text-center text-slate-500 dark:text-slate-400">
       No records this day.
     </p>
-    <ul
-      v-else
-      class="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900"
-    >
-      <RecordItem
-        v-for="r in records"
-        :key="r.id"
-        :record="r"
-        :activity="activities.byId[r.activity_type_id]"
-        :day="day"
-        @edit="editing = r"
-      />
-    </ul>
+    <template v-else>
+      <button
+        type="button"
+        class="flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+        @click="sortDesc = !sortDesc"
+      >
+        <BaseIcon name="arrows-up-down" size="sm" />
+        {{ sortDesc ? 'Newest first' : 'Oldest first' }}
+      </button>
+      <ul
+        class="divide-y divide-slate-200 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900"
+      >
+        <template
+          v-for="item in timeline"
+          :key="item.kind === 'record' ? item.record.id : `gap-${item.start.valueOf()}`"
+        >
+          <RecordItem
+            v-if="item.kind === 'record'"
+            :record="item.record"
+            :activity="activities.byId[item.record.activity_type_id]"
+            :day="day"
+            @edit="editing = item.record"
+          />
+          <RecordGap v-else :start="item.start" :end="item.end" :day="day" @add="editing = $event" />
+        </template>
+      </ul>
+    </template>
   </div>
 
   <FloatingAddButton label="Add record" @click="openNew" />

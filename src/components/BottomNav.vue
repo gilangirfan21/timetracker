@@ -3,8 +3,8 @@ import BaseIcon from '@/components/icons/BaseIcon.vue'
 
 const items = [
   { to: '/', label: 'Records', icon: 'list-bullet' },
-  { to: '/timer', label: 'Timer', icon: 'clock' },
   { to: '/stats', label: 'Stats', icon: 'chart-bar' },
+  { to: '/timer', label: 'Timer', icon: 'clock' },
   { to: '/activities', label: 'Activities', icon: 'tag' },
 ]
 </script>

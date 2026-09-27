@@ -6,15 +6,20 @@ import FloatingAddButton from '@/components/FloatingAddButton.vue'
 import BaseIcon from '@/components/icons/BaseIcon.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import { toCsv, downloadCsv } from '@/lib/csv'
+import { durationMs, formatHours, local } from '@/lib/time'
 import { useActivitiesStore } from '@/stores/activities'
 import { useAuthStore } from '@/stores/auth'
+import { useRecordsStore } from '@/stores/records'
 
 const auth = useAuthStore()
 const activities = useActivitiesStore()
+const recordsStore = useRecordsStore()
 
 const error = ref('')
 const loading = ref(true)
 const showArchived = ref(false)
+const exporting = ref(false)
 // null = closed, {} = new, activity object = editing
 const editing = ref(null)
 
@@ -46,10 +51,44 @@ async function run(action) {
 function logout() {
   run(() => auth.signOut())
 }
+
+async function exportCsv() {
+  exporting.value = true
+  await run(async () => {
+    const records = await recordsStore.listAll()
+    const rows = records.map((r) => {
+      const start = local(r.start_time)
+      const end = local(r.end_time)
+      const activity = activities.byId[r.activity_type_id]?.name ?? 'Deleted activity'
+      return [
+        start.format('YYYY-MM-DD'),
+        start.format('HH:mm'),
+        end.format('HH:mm'),
+        formatHours(durationMs(r)),
+        activity,
+        (r.tags ?? []).join(';'),
+        r.note ?? '',
+      ]
+    })
+    const csv = toCsv(['Date', 'Start', 'End', 'Duration', 'Activity', 'Tags', 'Note'], rows)
+    downloadCsv(`timetracker-export-${local().format('YYYYMMDD-HHmm')}.csv`, csv)
+  })
+  exporting.value = false
+}
 </script>
 
 <template>
   <PageHeader title="Activities">
+    <button
+      type="button"
+      class="icon-btn"
+      aria-label="Export records as CSV"
+      title="Export records as CSV"
+      :disabled="exporting"
+      @click="exportCsv"
+    >
+      <BaseIcon name="arrow-down-tray" size="md" />
+    </button>
     <button type="button" class="icon-btn hover:!text-red-600 dark:hover:!text-red-400" aria-label="Log out" @click="logout">
       <BaseIcon name="logout" size="md" />
     </button>
