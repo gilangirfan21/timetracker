@@ -25,6 +25,17 @@ export function usePopover({ width, height }) {
 
   function onScroll(e) {
     if (panel.value?.contains(e.target)) return
+    // Same reasoning as onResize: the keyboard opening can scroll the page to
+    // keep a focused input in view, which isn't the user scrolling away.
+    if (panel.value?.contains(document.activeElement)) return
+    close()
+  }
+
+  // On mobile, focusing an input inside the panel (e.g. a search box) opens the
+  // on-screen keyboard, which fires a resize as the viewport shrinks — that's
+  // not the user dismissing anything, so don't close while it's happening.
+  function onResize() {
+    if (panel.value?.contains(document.activeElement)) return
     close()
   }
 
@@ -33,14 +44,14 @@ export function usePopover({ width, height }) {
     isOpen.value = true
     document.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', close)
+    window.addEventListener('resize', onResize)
   }
 
   function close() {
     isOpen.value = false
     document.removeEventListener('pointerdown', onPointerDown)
     window.removeEventListener('scroll', onScroll, true)
-    window.removeEventListener('resize', close)
+    window.removeEventListener('resize', onResize)
   }
 
   function toggle() {
