@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import BaseIcon from '@/components/icons/BaseIcon.vue'
 import { usePopover } from '@/composables/usePopover'
 
@@ -9,15 +9,45 @@ const props = defineProps({
   options: { type: Array, required: true },
   placeholder: { type: String, default: 'Select…' },
   compact: { type: Boolean, default: false },
+  // Adds a text filter at the top of the panel so long lists can be typed to find.
+  searchable: { type: Boolean, default: false },
 })
 
-const { isOpen, trigger, panel, style, toggle, close } = usePopover({ height: 264 })
+const { isOpen, trigger, panel, style, toggle: togglePopover, close: closePopover } = usePopover({ height: 264 })
+
+const query = ref('')
+const searchInput = ref(null)
 
 const selected = computed(() => props.options.find((o) => o.value === model.value) ?? null)
+
+const filtered = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!props.searchable || !q) return props.options
+  return props.options.filter((o) => o.label.toLowerCase().includes(q))
+})
+
+async function toggle() {
+  togglePopover()
+  if (!isOpen.value) return
+  query.value = ''
+  if (props.searchable) {
+    await nextTick()
+    searchInput.value?.focus()
+  }
+}
+
+function close() {
+  closePopover()
+  query.value = ''
+}
 
 function pick(value) {
   model.value = value
   close()
+}
+
+function pickFirst() {
+  if (filtered.value.length) pick(filtered.value[0].value)
 }
 </script>
 
@@ -47,21 +77,36 @@ function pick(value) {
   </button>
 
   <Teleport to="body">
-    <ul v-if="isOpen" ref="panel" :style="style" class="popover max-h-64 min-w-48 overflow-y-auto">
-      <li v-for="opt in options" :key="opt.value">
-        <button
-          type="button"
-          class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-base transition-colors"
-          :class="
-            opt.value === model
-              ? 'bg-indigo-600 text-white dark:bg-indigo-500'
-              : 'hover:bg-slate-100 dark:hover:bg-slate-800'
-          "
-          @click="pick(opt.value)"
-        >
-          <slot name="option" :option="opt" :active="opt.value === model">{{ opt.label }}</slot>
-        </button>
-      </li>
-    </ul>
+    <div v-if="isOpen" ref="panel" :style="style" class="popover flex max-h-64 min-w-48 flex-col overflow-hidden p-2">
+      <input
+        v-if="searchable"
+        ref="searchInput"
+        v-model="query"
+        type="text"
+        placeholder="Type to search…"
+        class="field mb-1.5 shrink-0"
+        @keydown.escape="close"
+        @keydown.enter.prevent="pickFirst"
+      />
+      <ul class="min-h-0 overflow-y-auto">
+        <li v-for="opt in filtered" :key="opt.value">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-base transition-colors"
+            :class="
+              opt.value === model
+                ? 'bg-indigo-600 text-white dark:bg-indigo-500'
+                : 'hover:bg-slate-100 dark:hover:bg-slate-800'
+            "
+            @click="pick(opt.value)"
+          >
+            <slot name="option" :option="opt" :active="opt.value === model">{{ opt.label }}</slot>
+          </button>
+        </li>
+        <li v-if="searchable && !filtered.length" class="px-3 py-2.5 text-sm text-slate-500 dark:text-slate-400">
+          No matches.
+        </li>
+      </ul>
+    </div>
   </Teleport>
 </template>

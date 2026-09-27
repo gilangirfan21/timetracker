@@ -101,7 +101,7 @@ function doRemove() {
   <form class="space-y-4" @submit.prevent="submit">
     <div>
       <span class="label">Activity</span>
-      <BaseSelect v-model="form.activity_type_id" :options="activityOptions" placeholder="Pick activity">
+      <BaseSelect v-model="form.activity_type_id" :options="activityOptions" placeholder="Pick activity" searchable>
         <template #option="{ option, active }">
           <ActivityIcon :activity="option.activity" size="sm" :inverted="active" />
           <span class="truncate">{{ option.label }}</span>
