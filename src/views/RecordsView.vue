@@ -8,7 +8,7 @@ import RecordForm from '@/components/RecordForm.vue'
 import RecordGap from '@/components/RecordGap.vue'
 import RecordItem from '@/components/RecordItem.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
-import { formatHours, local, overlapMs } from '@/lib/time'
+import { formatHours, local, minuteMs, overlapMs } from '@/lib/time'
 import { useActivitiesStore } from '@/stores/activities'
 import { useRecordsStore } from '@/stores/records'
 
@@ -62,12 +62,12 @@ const MIN_GAP_MS = 60_000
 // (overlapping) activities are handled by tracking the furthest point covered
 // so far rather than assuming the previous record's end is the gap start.
 const timeline = computed(() => {
-  const boundaryEnd = isToday.value ? local() : dayEnd.value
+  const boundaryEnd = isToday.value ? local().startOf('minute') : dayEnd.value
   const clipped = records.value
     .map((r) => ({
       record: r,
-      start: local(Math.max(new Date(r.start_time).getTime(), day.value.valueOf())),
-      end: local(Math.min(new Date(r.end_time).getTime(), dayEnd.value.valueOf())),
+      start: local(Math.max(minuteMs(r.start_time), day.value.valueOf())),
+      end: local(Math.min(minuteMs(r.end_time), dayEnd.value.valueOf())),
     }))
     .sort((a, b) => a.start.valueOf() - b.start.valueOf())
 
