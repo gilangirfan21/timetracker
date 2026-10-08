@@ -114,6 +114,29 @@ async function load() {
   loading.value = false
 }
 
+// Day view: a scheduled weekday can be marked off (holiday, leave) and back.
+const isScheduled = computed(() => work.settings.value.workdays.includes(from.value.isoWeekday()))
+const isDayOff = computed(() => daysOff.value.has(from.value.format('YYYY-MM-DD')))
+const togglingDayOff = ref(false)
+
+async function toggleDayOff() {
+  const day = from.value
+  togglingDayOff.value = true
+  try {
+    if (isDayOff.value) await daysOffStore.remove(day)
+    else await daysOffStore.add(day)
+    const next = new Set(daysOff.value)
+    const key = day.format('YYYY-MM-DD')
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    daysOff.value = next
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    togglingDayOff.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     await activities.load()
@@ -230,7 +253,7 @@ function shift(step) {
         </p>
         <template v-else-if="range === 'day'">
           <p v-if="!workDays[0]?.workday && !workDays[0]?.value" class="text-sm text-slate-500 dark:text-slate-400">
-            Day off — no target.
+            {{ isScheduled ? 'Day off' : 'Not a work day' }} — no target.
           </p>
           <TargetBar
             v-else
@@ -239,6 +262,22 @@ function shift(step) {
             :max-ms="work.maxMs.value"
             :no-target="!workDays[0]?.workday"
           />
+          <div
+            v-if="isScheduled"
+            class="mt-3 flex items-center justify-between border-t border-slate-200 pt-3 text-sm dark:border-slate-800"
+          >
+            <span class="text-slate-500 dark:text-slate-400">
+              {{ isDayOff ? 'Marked as day off' : 'Holiday or leave?' }}
+            </span>
+            <button
+              type="button"
+              class="font-medium text-indigo-600 disabled:opacity-50 dark:text-indigo-400"
+              :disabled="togglingDayOff"
+              @click="toggleDayOff"
+            >
+              {{ isDayOff ? 'Undo day off' : 'Mark as day off' }}
+            </button>
+          </div>
         </template>
         <template v-else>
           <p class="mb-3 text-sm text-slate-500 dark:text-slate-400">

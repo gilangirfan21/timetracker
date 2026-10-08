@@ -1,5 +1,7 @@
 <script setup>
 import { computed, reactive } from 'vue'
+import BaseCheckbox from '@/components/ui/BaseCheckbox.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
 import { useActivitiesStore } from '@/stores/activities'
 import { useCoupleTarget } from '@/composables/useCoupleTarget'
 import { useWorkTarget } from '@/composables/useWorkTarget'
@@ -9,7 +11,10 @@ const activities = useActivitiesStore()
 const work = useWorkTarget()
 const couple = useCoupleTarget()
 
-const workOptions = computed(() => activities.active.map((a) => ({ value: a.id, label: a.name })))
+const workOptions = computed(() => [
+  { value: '', label: 'None' },
+  ...activities.active.map((a) => ({ value: a.id, label: a.name })),
+])
 
 const form = reactive({
   work: { ...work.settings.value, workdays: [...work.settings.value.workdays] },
@@ -62,19 +67,13 @@ function submit() {
     <section class="space-y-3">
       <div class="flex items-center justify-between">
         <h3 class="font-semibold">Work time</h3>
-        <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-          <input v-model="form.work.visible" type="checkbox" class="h-4 w-4 rounded" />
-          Show on Stats
-        </label>
+        <BaseCheckbox v-model="form.work.visible">Show on Stats</BaseCheckbox>
       </div>
 
-      <label class="block">
+      <div>
         <span class="label">Activity</span>
-        <select v-model="form.work.activityId" class="field">
-          <option value="">None</option>
-          <option v-for="o in workOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-        </select>
-      </label>
+        <BaseSelect v-model="form.work.activityId" :options="workOptions" />
+      </div>
 
       <div class="grid grid-cols-2 gap-3">
         <label>
@@ -107,7 +106,7 @@ function submit() {
           </button>
         </div>
         <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-          Other days, and days marked off in Records, have no target.
+          Other days, and days marked off in Stats, have no target.
         </p>
       </div>
       <p v-if="workError" class="text-sm text-red-600 dark:text-red-400">{{ workError }}</p>
@@ -116,16 +115,10 @@ function submit() {
     <section class="space-y-3 border-t border-slate-200 pt-5 dark:border-slate-800">
       <div class="flex items-center justify-between">
         <h3 class="font-semibold">Couple time</h3>
-        <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-          <input v-model="form.couple.visible" type="checkbox" class="h-4 w-4 rounded" />
-          Show on Stats
-        </label>
+        <BaseCheckbox v-model="form.couple.visible">Show on Stats</BaseCheckbox>
       </div>
 
-      <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-        <input v-model="form.couple.enabled" type="checkbox" class="h-4 w-4 rounded" />
-        Set a daily target
-      </label>
+      <BaseCheckbox v-model="form.couple.enabled">Set a daily target</BaseCheckbox>
 
       <div v-if="form.couple.enabled" class="grid grid-cols-2 gap-3">
         <label>
