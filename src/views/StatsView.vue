@@ -13,18 +13,21 @@ import { useWorkTarget } from '@/composables/useWorkTarget'
 import { COUPLE_TAG, hasTag } from '@/lib/tags'
 import { formatHours, local, overlapMs } from '@/lib/time'
 import { useActivitiesStore } from '@/stores/activities'
+import { useDaysOffStore } from '@/stores/daysOff'
 import { useRecordsStore } from '@/stores/records'
 
 const RANGES = ['day', 'week', 'month']
 
 const activities = useActivitiesStore()
 const recordsStore = useRecordsStore()
+const daysOffStore = useDaysOffStore()
 const work = useWorkTarget()
 const couple = useCoupleTarget()
 
 const range = ref('day')
 const anchor = ref(local())
 const records = ref([])
+const daysOff = ref(new Set())
 const loading = ref(true)
 const error = ref('')
 const showSettings = ref(false)
@@ -77,23 +80,38 @@ const coupleDays = computed(() =>
 const workActivityId = computed(() => work.settings.value.activityId)
 const workRecords = computed(() => records.value.filter((r) => r.activity_type_id === workActivityId.value))
 const workDays = computed(() =>
-  days.value.map((d) => ({ day: d, value: sum(workRecords.value, d, d.add(1, 'day')) })),
+  days.value.map((d) => ({
+    day: d,
+    value: sum(workRecords.value, d, d.add(1, 'day')),
+    workday: work.isWorkday(d, daysOff.value),
+  })),
 )
 const workedDays = computed(() => workDays.value.filter((d) => d.value > 0))
+// Days off have no target, so they don't count towards (or against) it.
+const targetDays = computed(() => workedDays.value.filter((d) => d.workday))
 const onTargetCount = computed(
-  () => workedDays.value.filter((d) => d.value >= work.minMs.value && d.value <= work.maxMs.value).length,
+  () => targetDays.value.filter((d) => d.value >= work.minMs.value && d.value <= work.maxMs.value).length,
+)
+const extraTotal = computed(() =>
+  workedDays.value.filter((d) => !d.workday).reduce((total, d) => total + d.value, 0),
 )
 
 async function load() {
   loading.value = true
   error.value = ''
-  try {
-    records.value = await recordsStore.listRange(from.value, to.value)
-  } catch (e) {
-    error.value = e.message
-  } finally {
-    loading.value = false
+  const [recordsResult, daysOffResult] = await Promise.allSettled([
+    recordsStore.listRange(from.value, to.value),
+    daysOffStore.listRange(from.value, to.value),
+  ])
+  if (recordsResult.status === 'fulfilled') records.value = recordsResult.value
+  else error.value = recordsResult.reason.message
+  // Without days off, stats still work — every scheduled weekday just keeps its target.
+  if (daysOffResult.status === 'fulfilled') daysOff.value = daysOffResult.value
+  else {
+    daysOff.value = new Set()
+    error.value ||= `Couldn’t load days off: ${daysOffResult.reason.message}`
   }
+  loading.value = false
 }
 
 onMounted(async () => {
@@ -210,15 +228,22 @@ function shift(step) {
             Stats settings
           </button>.
         </p>
-        <TargetBar
-          v-else-if="range === 'day'"
-          :value="workDays[0]?.value ?? 0"
-          :min-ms="work.minMs.value"
-          :max-ms="work.maxMs.value"
-        />
+        <template v-else-if="range === 'day'">
+          <p v-if="!workDays[0]?.workday && !workDays[0]?.value" class="text-sm text-slate-500 dark:text-slate-400">
+            Day off — no target.
+          </p>
+          <TargetBar
+            v-else
+            :value="workDays[0]?.value ?? 0"
+            :min-ms="work.minMs.value"
+            :max-ms="work.maxMs.value"
+            :no-target="!workDays[0]?.workday"
+          />
+        </template>
         <template v-else>
           <p class="mb-3 text-sm text-slate-500 dark:text-slate-400">
-            On target ({{ work.label.value }}) {{ onTargetCount }} of {{ workedDays.length }} work days
+            On target ({{ work.label.value }}) {{ onTargetCount }} of {{ targetDays.length }} work days
+            <template v-if="extraTotal"> · {{ formatHours(extraTotal) }} on days off</template>
           </p>
           <p v-if="!workedDays.length" class="text-sm text-slate-500 dark:text-slate-400">No work recorded.</p>
           <div v-else class="space-y-2.5">
@@ -229,6 +254,7 @@ function shift(step) {
               :min-ms="work.minMs.value"
               :max-ms="work.maxMs.value"
               :label="d.day.format('ddd D')"
+              :no-target="!d.workday"
               compact
             />
           </div>

@@ -12,9 +12,25 @@ const couple = useCoupleTarget()
 const workOptions = computed(() => activities.active.map((a) => ({ value: a.id, label: a.name })))
 
 const form = reactive({
-  work: { ...work.settings.value },
+  work: { ...work.settings.value, workdays: [...work.settings.value.workdays] },
   couple: { ...couple.settings.value },
 })
+
+// ISO weekday numbers, Monday first.
+const WEEKDAYS = [
+  [1, 'Mon'],
+  [2, 'Tue'],
+  [3, 'Wed'],
+  [4, 'Thu'],
+  [5, 'Fri'],
+  [6, 'Sat'],
+  [7, 'Sun'],
+]
+
+function toggleWorkday(n) {
+  const days = form.work.workdays
+  form.work.workdays = days.includes(n) ? days.filter((d) => d !== n) : [...days, n].sort()
+}
 
 const workError = computed(() => {
   if (!(form.work.min > 0)) return 'Minimum must be more than 0.'
@@ -69,6 +85,30 @@ function submit() {
           <span class="label">Maximum (hours)</span>
           <input v-model.number="form.work.max" type="number" inputmode="decimal" min="0.5" max="24" step="0.5" class="field" />
         </label>
+      </div>
+
+      <div>
+        <span class="label">Work days</span>
+        <div class="grid grid-cols-7 gap-1.5">
+          <button
+            v-for="[n, name] in WEEKDAYS"
+            :key="n"
+            type="button"
+            class="rounded-lg py-2 text-sm font-medium transition-colors"
+            :class="
+              form.work.workdays.includes(n)
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+            "
+            :aria-pressed="form.work.workdays.includes(n)"
+            @click="toggleWorkday(n)"
+          >
+            {{ name }}
+          </button>
+        </div>
+        <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+          Other days, and days marked off in Records, have no target.
+        </p>
       </div>
       <p v-if="workError" class="text-sm text-red-600 dark:text-red-400">{{ workError }}</p>
     </section>

@@ -2,7 +2,8 @@ import { computed, ref, watch } from 'vue'
 
 const HOUR = 3600_000
 const STORAGE_KEY = 'workSettings'
-const DEFAULT = { activityId: '', min: 8, max: 9, visible: true }
+// workdays: ISO weekdays with a target (1 = Mon … 7 = Sun).
+const DEFAULT = { activityId: '', min: 8, max: 9, visible: true, workdays: [1, 2, 3, 4, 5] }
 
 function readInitial() {
   try {
@@ -46,5 +47,10 @@ export function useWorkTarget() {
     settings.value = { ...settings.value, ...patch }
   }
 
-  return { settings, minMs, maxMs, label, guessActivity, save }
+  // Whether a day has a work target: a scheduled weekday not marked off.
+  function isWorkday(day, daysOff) {
+    return settings.value.workdays.includes(day.isoWeekday()) && !daysOff.has(day.format('YYYY-MM-DD'))
+  }
+
+  return { settings, minMs, maxMs, label, guessActivity, save, isWorkday }
 }

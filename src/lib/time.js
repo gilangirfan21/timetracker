@@ -33,13 +33,22 @@ export function formatHours(ms) {
   return h ? `${h}h ${pad(m)}m` : `${m}m`
 }
 
+const MINUTE = 60_000
+
+// Epoch ms floored to the minute. Times are shown as HH:mm, so durations are
+// computed on whole minutes too — otherwise stored seconds make 10:00–10:05
+// read as 4m or 6m.
+export function minuteMs(value) {
+  return Math.floor(new Date(value).getTime() / MINUTE) * MINUTE
+}
+
 export function durationMs(record) {
-  return new Date(record.end_time) - new Date(record.start_time)
+  return minuteMs(record.end_time) - minuteMs(record.start_time)
 }
 
 // Part of a record that falls inside [from, to), in ms.
 export function overlapMs(record, from, to) {
-  const start = Math.max(new Date(record.start_time).getTime(), from.valueOf())
-  const end = Math.min(new Date(record.end_time).getTime(), to.valueOf())
+  const start = Math.max(minuteMs(record.start_time), from.valueOf())
+  const end = Math.min(minuteMs(record.end_time), to.valueOf())
   return Math.max(0, end - start)
 }

@@ -8,17 +8,23 @@ import RecordForm from '@/components/RecordForm.vue'
 import RecordGap from '@/components/RecordGap.vue'
 import RecordItem from '@/components/RecordItem.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
-import { formatHours, local, overlapMs } from '@/lib/time'
+import { useWorkTarget } from '@/composables/useWorkTarget'
+import { formatHours, local, minuteMs, overlapMs } from '@/lib/time'
 import { useActivitiesStore } from '@/stores/activities'
+import { useDaysOffStore } from '@/stores/daysOff'
 import { useRecordsStore } from '@/stores/records'
 
 const activities = useActivitiesStore()
 const recordsStore = useRecordsStore()
+const daysOffStore = useDaysOffStore()
+const work = useWorkTarget()
 
 const SORT_KEY = 'recordsSortDesc'
 
 const day = ref(local().startOf('day'))
 const records = ref([])
+const isDayOff = ref(false)
+const togglingDayOff = ref(false)
 const loading = ref(true)
 const error = ref('')
 const sortDesc = ref(readSortDesc())
@@ -51,6 +57,32 @@ const label = computed(() => {
   return day.value.format('ddd, D MMM')
 })
 
+// Work target status for this day; only shown once a work activity is set up.
+const showWorkStatus = computed(() => !!work.settings.value.activityId)
+const isScheduled = computed(() => work.settings.value.workdays.includes(day.value.isoWeekday()))
+
+async function loadDayOff() {
+  try {
+    isDayOff.value = (await daysOffStore.listRange(day.value, dayEnd.value)).size > 0
+  } catch (e) {
+    isDayOff.value = false
+    error.value ||= `Couldn’t load days off: ${e.message}`
+  }
+}
+
+async function toggleDayOff() {
+  togglingDayOff.value = true
+  try {
+    if (isDayOff.value) await daysOffStore.remove(day.value)
+    else await daysOffStore.add(day.value)
+    isDayOff.value = !isDayOff.value
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    togglingDayOff.value = false
+  }
+}
+
 // Only the part inside this day counts (records crossing midnight are split).
 const total = computed(() => records.value.reduce((sum, r) => sum + overlapMs(r, day.value, dayEnd.value), 0))
 
@@ -62,12 +94,12 @@ const MIN_GAP_MS = 60_000
 // (overlapping) activities are handled by tracking the furthest point covered
 // so far rather than assuming the previous record's end is the gap start.
 const timeline = computed(() => {
-  const boundaryEnd = isToday.value ? local() : dayEnd.value
+  const boundaryEnd = isToday.value ? local().startOf('minute') : dayEnd.value
   const clipped = records.value
     .map((r) => ({
       record: r,
-      start: local(Math.max(new Date(r.start_time).getTime(), day.value.valueOf())),
-      end: local(Math.min(new Date(r.end_time).getTime(), dayEnd.value.valueOf())),
+      start: local(Math.max(minuteMs(r.start_time), day.value.valueOf())),
+      end: local(Math.min(minuteMs(r.end_time), dayEnd.value.valueOf())),
     }))
     .sort((a, b) => a.start.valueOf() - b.start.valueOf())
 
@@ -91,11 +123,13 @@ const formActivities = computed(() =>
 async function load() {
   loading.value = true
   error.value = ''
+  const dayOff = loadDayOff()
   try {
     records.value = await recordsStore.listRange(day.value, dayEnd.value)
   } catch (e) {
     error.value = e.message
   } finally {
+    await dayOff
     loading.value = false
   }
 }
@@ -158,6 +192,22 @@ async function remove() {
     >
       <span class="text-sm font-medium text-indigo-700 dark:text-indigo-300">Total</span>
       <span class="text-lg font-bold text-indigo-700 tabular-nums dark:text-indigo-300">{{ formatHours(total) }}</span>
+    </div>
+
+    <div v-if="showWorkStatus" class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+      <BaseIcon name="briefcase" size="sm" />
+      <span class="flex-1">
+        {{ !isScheduled ? 'Not a work day — no target' : isDayOff ? 'Day off — no work target' : 'Work day' }}
+      </span>
+      <button
+        v-if="isScheduled"
+        type="button"
+        class="font-medium text-indigo-600 disabled:opacity-50 dark:text-indigo-400"
+        :disabled="togglingDayOff"
+        @click="toggleDayOff"
+      >
+        {{ isDayOff ? 'Undo day off' : 'Mark as day off' }}
+      </button>
     </div>
 
     <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>

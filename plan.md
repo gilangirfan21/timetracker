@@ -18,6 +18,8 @@ daily list, statistics, and "couple time" tracking via tag.
 - records: id, user_id, activity_type_id, start_time, end_time, tags text[], note
 - running_records: id, user_id, activity_type_id, start_time, tags text[]
   (unique per user + activity_type)
+- days_off: id, user_id, date (local calendar day), created_at
+  (unique per user + date) — workdays marked as holiday/leave, no work target
 - RLS enabled on all tables, policy: user_id = auth.uid()
 - user_id has default auth.uid(), do not send it from client
 
