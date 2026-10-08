@@ -95,9 +95,12 @@ const MIN_GAP_MS = 60_000
 // so far rather than assuming the previous record's end is the gap start.
 const timeline = computed(() => {
   const boundaryEnd = isToday.value ? local().startOf('minute') : dayEnd.value
+  const boundaryEnd = isToday.value ? local().startOf('minute') : dayEnd.value
   const clipped = records.value
     .map((r) => ({
       record: r,
+      start: local(Math.max(minuteMs(r.start_time), day.value.valueOf())),
+      end: local(Math.min(minuteMs(r.end_time), dayEnd.value.valueOf())),
       start: local(Math.max(minuteMs(r.start_time), day.value.valueOf())),
       end: local(Math.min(minuteMs(r.end_time), dayEnd.value.valueOf())),
     }))
